@@ -5,151 +5,316 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Omar Orders</title>
+
 <style>
-body{font-family:Arial;background:#f1f5f9;margin:0;padding:20px;color:#172033}
-main{max-width:650px;margin:auto}
-section{background:white;padding:20px;border-radius:14px;margin:16px 0}
-input,textarea,button{box-sizing:border-box;width:100%;padding:12px;margin:7px 0;border:1px solid #ddd;border-radius:8px;font:inherit}
-button{background:#1769e0;color:white;border:0;cursor:pointer}
-.order{padding:12px;border:1px solid #ddd;border-radius:10px;margin:10px 0;overflow-wrap:anywhere}
-.hidden{display:none}
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background: #f1f5f9;
+  margin: 0;
+  padding: 20px;
+  color: #172033;
+}
+
+main {
+  max-width: 650px;
+  margin: auto;
+}
+
+section {
+  background: white;
+  padding: 20px;
+  border-radius: 14px;
+  margin: 16px 0;
+}
+
+input, textarea, button, select {
+  width: 100%;
+  padding: 12px;
+  margin: 7px 0;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font: inherit;
+}
+
+button {
+  background: #1769e0;
+  color: white;
+  border: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.order {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+
+.hidden {
+  display: none;
+}
+
+#msg {
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
 </style>
 </head>
+
 <body>
 <main>
 <h1>📦 Omar Orders</h1>
+
 <section>
 <h2>إرسال طلب</h2>
+
 <form id="orderForm">
-<input id="name" placeholder="اسم العميل" maxlength="120" required>
-<input id="phone" placeholder="رقم الهاتف" maxlength="30" required>
-<textarea id="details" placeholder="تفاصيل الطلب" maxlength="3000" required></textarea>
-<button>إرسال الطلب</button>
+<input id="name" placeholder="اسم العميل"
+maxlength="120" required>
+
+<input id="phone" type="tel"
+placeholder="رقم الهاتف" maxlength="30" required>
+
+<textarea id="details"
+placeholder="تفاصيل الطلب"
+maxlength="3000" required></textarea>
+
+<button id="sendBtn" type="submit">إرسال الطلب</button>
 </form>
-<p id="msg"></p>
+
+<p id="msg" role="status" aria-live="polite"></p>
 </section>
 
 <section>
 <h2>لوحة التحكم 🔐</h2>
+
 <form id="login">
-<input id="email" type="email" placeholder="الإيميل" required>
-<input id="password" type="password" placeholder="كلمة المرور" required>
-<button>تسجيل الدخول</button>
+<input id="email" type="email"
+placeholder="الإيميل" required>
+
+<input id="password" type="password"
+placeholder="كلمة المرور" required>
+
+<button type="submit">تسجيل الدخول</button>
 </form>
+
 <div id="panel" class="hidden">
-<button id="refresh">تحديث الطلبات</button>
-<button id="logout">تسجيل الخروج</button>
+<button id="refresh" type="button">تحديث الطلبات</button>
+<button id="logout" type="button">تسجيل الخروج</button>
 <div id="orders"></div>
 </div>
 </section>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
-const URL = "https://fwfznujexktjvfkyvvdz.supabase.co/rest/v1/";
+const URL = "https://fwfznujexktjvfkyvvdz.supabase.co";
+
 const KEY = "sb_publishable_pKrSlV8XHhz03ytE5d2zRw_B-CR-YSA";
-const db = window.supabase.createClient(URL,KEY);
+
+const db = window.supabase.createClient(URL, KEY);
 const $ = id => document.getElementById(id);
 
-$("orderForm").onsubmit = async e => {
+// إرسال الطلب
+$("orderForm").addEventListener("submit", async e => {
   e.preventDefault();
-  $("msg").textContent = "جارٍ إرسال الطلب...";
-  const {error} = await db.from("orders").insert({
-    customer_name:$("name").value.trim(),
-    phone:$("phone").value.trim(),
-    details:$("details").value.trim()
-  });
-if (error) {
-  console.error("Supabase order error:", error);
-  $("msg").textContent =
-    "فشل إرسال الطلب: " + error.message;
-} else {
-  $("msg").textContent = "تم إرسال الطلب بنجاح!";
-  $("orderForm").reset();
-}
-};
 
-async function loadOrders(){
-  const {data:sessionData} = await db.auth.getSession();
-  const user = sessionData.session?.user;
-  if(!user) return;
+  const button = $("sendBtn");
+  const msg = $("msg");
 
-  const {data:admin,error:adminError} = await db
-    .from("admin_users").select("user_id")
-    .eq("user_id",user.id).maybeSingle();
+  button.disabled = true;
+  msg.textContent = "جارٍ إرسال الطلب...";
 
-  if(adminError || !admin){
-    alert("الحساب غير مصرح له.");
-    await db.auth.signOut();
-    $("panel").classList.add("hidden");
-    return;
-  }
-
-  const {data,error} = await db.from("orders")
-    .select("*").order("created_at",{ascending:false}).limit(100);
-
-  const box = $("orders");
-  box.replaceChildren();
-
-  if(error){
-    box.textContent = "تعذر تحميل الطلبات.";
-    return;
-  }
-
-  if(!data.length){
-    box.textContent = "لا توجد طلبات حتى الآن.";
-    return;
-  }
-
-  data.forEach(o=>{
-    const card=document.createElement("div");
-    card.className="order";
-    const line=document.createElement("p");
-    line.textContent=`طلب #${o.id} | ${o.customer_name} | ${o.phone}`;
-    card.appendChild(line);
-    const details=document.createElement("p");
-    details.textContent=o.details;
-    card.appendChild(details);
-
-    const select=document.createElement("select");
-    [["new","جديد"],["processing","قيد التنفيذ"],
-     ["completed","مكتمل"],["cancelled","ملغي"]]
-      .forEach(([v,label])=>{
-        const op=document.createElement("option");
-        op.value=v;op.textContent=label;select.appendChild(op);
-      });
-    select.value=o.status;
-    card.appendChild(select);
-
-    const save=document.createElement("button");
-    save.textContent="حفظ الحالة";
-    save.onclick=async()=>{
-      const {error}=await db.from("orders")
-        .update({status:select.value}).eq("id",o.id);
-      alert(error?"فشل التحديث":"تم تحديث الحالة");
+  try {
+    const order = {
+      customer_name: $("name").value.trim(),
+      phone: $("phone").value.trim(),
+      details: $("details").value.trim()
     };
-    card.appendChild(save);
-    box.appendChild(card);
-  });
+
+    const { error } = await db
+      .from("orders")
+      .insert(order);
+
+    if (error) {
+      console.error("Order error:", error);
+      msg.textContent =
+        "فشل إرسال الطلب: " + error.message;
+      return;
+    }
+
+    msg.textContent = "تم إرسال الطلب بنجاح!";
+    $("orderForm").reset();
+
+  } catch (error) {
+    console.error("Connection error:", error);
+    msg.textContent =
+      "حصل خطأ في الاتصال. راجع الإنترنت وإعدادات Supabase.";
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// تحميل الطلبات
+async function loadOrders() {
+  const box = $("orders");
+  box.textContent = "جارٍ تحميل الطلبات...";
+
+  try {
+    const { data: sessionData, error: sessionError } =
+      await db.auth.getSession();
+
+    if (sessionError) throw sessionError;
+
+    const user = sessionData.session?.user;
+
+    if (!user) {
+      box.textContent = "سجّل الدخول أولاً.";
+      return;
+    }
+
+    const { data: admin, error: adminError } = await db
+      .from("admin_users")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (adminError) throw adminError;
+
+    if (!admin) {
+      box.textContent = "الحساب غير مصرح له.";
+      await db.auth.signOut();
+      $("panel").classList.add("hidden");
+      return;
+    }
+
+    const { data, error } = await db
+      .from("orders")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+
+    box.replaceChildren();
+
+    if (!data || data.length === 0) {
+      box.textContent = "لا توجد طلبات حتى الآن.";
+      return;
+    }
+
+    data.forEach(order => {
+      const card = document.createElement("div");
+      card.className = "order";
+
+      const title = document.createElement("p");
+      title.textContent =
+        `طلب #${order.id} | ${order.customer_name} | ${order.phone}`;
+      card.appendChild(title);
+
+      const details = document.createElement("p");
+      details.textContent = order.details;
+      card.appendChild(details);
+
+      const status = document.createElement("select");
+
+      [
+        ["new", "جديد"],
+        ["processing", "قيد التنفيذ"],
+        ["completed", "مكتمل"],
+        ["cancelled", "ملغي"]
+      ].forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        status.appendChild(option);
+      });
+
+      status.value = order.status;
+      card.appendChild(status);
+
+      const save = document.createElement("button");
+      save.type = "button";
+      save.textContent = "حفظ الحالة";
+
+      save.onclick = async () => {
+        save.disabled = true;
+
+        try {
+          const { error } = await db
+            .from("orders")
+            .update({ status: status.value })
+            .eq("id", order.id);
+
+          if (error) throw error;
+
+          alert("تم تحديث حالة الطلب.");
+        } catch (error) {
+          console.error("Update error:", error);
+          alert("فشل تحديث الحالة: " + error.message);
+        } finally {
+          save.disabled = false;
+        }
+      };
+
+      card.appendChild(save);
+      box.appendChild(card);
+    });
+
+  } catch (error) {
+    console.error("Load orders error:", error);
+    box.textContent =
+      "تعذر تحميل الطلبات: " + error.message;
+  }
 }
 
-$("login").onsubmit = async e => {
+// تسجيل دخول المدير
+$("login").addEventListener("submit", async e => {
   e.preventDefault();
-  const {error}=await db.auth.signInWithPassword({
-    email:$("email").value.trim(),
-    password:$("password").value
-  });
-  if(error){alert("راجع الإيميل وكلمة المرور");return;}
-  $("panel").classList.remove("hidden");
-  await loadOrders();
-};
 
-$("refresh").onclick=loadOrders;
-$("logout").onclick=async()=>{
-  await db.auth.signOut();
+  try {
+    const { error } = await db.auth.signInWithPassword({
+      email: $("email").value.trim(),
+      password: $("password").value
+    });
+
+    if (error) throw error;
+
+    $("panel").classList.remove("hidden");
+    await loadOrders();
+
+  } catch (error) {
+    console.error("Login error:", error);
+    alert("تعذر تسجيل الدخول: " + error.message);
+  }
+});
+
+// تحديث الطلبات
+$("refresh").addEventListener("click", loadOrders);
+
+// تسجيل الخروج
+$("logout").addEventListener("click", async () => {
+  const { error } = await db.auth.signOut();
+
+  if (error) {
+    alert("تعذر تسجيل الخروج.");
+    return;
+  }
+
   $("panel").classList.add("hidden");
   $("orders").replaceChildren();
-};
+});
 </script>
 </body>
 </html>
