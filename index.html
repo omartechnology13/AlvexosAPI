@@ -59,10 +59,14 @@ $("orderForm").onsubmit = async e => {
     phone:$("phone").value.trim(),
     details:$("details").value.trim()
   });
-  $("msg").textContent = error
-    ? "تعذر إرسال الطلب، راجع إعدادات الاتصال."
-    : "تم إرسال الطلب بنجاح!";
-  if(!error) $("orderForm").reset();
+if (error) {
+  console.error("Supabase order error:", error);
+  $("msg").textContent =
+    "فشل إرسال الطلب: " + error.message;
+} else {
+  $("msg").textContent = "تم إرسال الطلب بنجاح!";
+  $("orderForm").reset();
+}
 };
 
 async function loadOrders(){
