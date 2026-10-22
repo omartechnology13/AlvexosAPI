@@ -1,0 +1,151 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omar Orders</title>
+<style>
+body{font-family:Arial;background:#f1f5f9;margin:0;padding:20px;color:#172033}
+main{max-width:650px;margin:auto}
+section{background:white;padding:20px;border-radius:14px;margin:16px 0}
+input,textarea,button{box-sizing:border-box;width:100%;padding:12px;margin:7px 0;border:1px solid #ddd;border-radius:8px;font:inherit}
+button{background:#1769e0;color:white;border:0;cursor:pointer}
+.order{padding:12px;border:1px solid #ddd;border-radius:10px;margin:10px 0;overflow-wrap:anywhere}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>📦 Omar Orders</h1>
+<section>
+<h2>إرسال طلب</h2>
+<form id="orderForm">
+<input id="name" placeholder="اسم العميل" maxlength="120" required>
+<input id="phone" placeholder="رقم الهاتف" maxlength="30" required>
+<textarea id="details" placeholder="تفاصيل الطلب" maxlength="3000" required></textarea>
+<button>إرسال الطلب</button>
+</form>
+<p id="msg"></p>
+</section>
+
+<section>
+<h2>لوحة التحكم 🔐</h2>
+<form id="login">
+<input id="email" type="email" placeholder="الإيميل" required>
+<input id="password" type="password" placeholder="كلمة المرور" required>
+<button>تسجيل الدخول</button>
+</form>
+<div id="panel" class="hidden">
+<button id="refresh">تحديث الطلبات</button>
+<button id="logout">تسجيل الخروج</button>
+<div id="orders"></div>
+</div>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const URL = "https://fwfznujexktjvfkyvvdz.supabase.co/rest/v1/";
+const KEY = "sb_publishable_pKrSlV8XHhz03ytE5d2zRw_B-CR-YSA";
+const db = window.supabase.createClient(URL,KEY);
+const $ = id => document.getElementById(id);
+
+$("orderForm").onsubmit = async e => {
+  e.preventDefault();
+  $("msg").textContent = "جارٍ إرسال الطلب...";
+  const {error} = await db.from("orders").insert({
+    customer_name:$("name").value.trim(),
+    phone:$("phone").value.trim(),
+    details:$("details").value.trim()
+  });
+  $("msg").textContent = error
+    ? "تعذر إرسال الطلب، راجع إعدادات الاتصال."
+    : "تم إرسال الطلب بنجاح!";
+  if(!error) $("orderForm").reset();
+};
+
+async function loadOrders(){
+  const {data:sessionData} = await db.auth.getSession();
+  const user = sessionData.session?.user;
+  if(!user) return;
+
+  const {data:admin,error:adminError} = await db
+    .from("admin_users").select("user_id")
+    .eq("user_id",user.id).maybeSingle();
+
+  if(adminError || !admin){
+    alert("الحساب غير مصرح له.");
+    await db.auth.signOut();
+    $("panel").classList.add("hidden");
+    return;
+  }
+
+  const {data,error} = await db.from("orders")
+    .select("*").order("created_at",{ascending:false}).limit(100);
+
+  const box = $("orders");
+  box.replaceChildren();
+
+  if(error){
+    box.textContent = "تعذر تحميل الطلبات.";
+    return;
+  }
+
+  if(!data.length){
+    box.textContent = "لا توجد طلبات حتى الآن.";
+    return;
+  }
+
+  data.forEach(o=>{
+    const card=document.createElement("div");
+    card.className="order";
+    const line=document.createElement("p");
+    line.textContent=`طلب #${o.id} | ${o.customer_name} | ${o.phone}`;
+    card.appendChild(line);
+    const details=document.createElement("p");
+    details.textContent=o.details;
+    card.appendChild(details);
+
+    const select=document.createElement("select");
+    [["new","جديد"],["processing","قيد التنفيذ"],
+     ["completed","مكتمل"],["cancelled","ملغي"]]
+      .forEach(([v,label])=>{
+        const op=document.createElement("option");
+        op.value=v;op.textContent=label;select.appendChild(op);
+      });
+    select.value=o.status;
+    card.appendChild(select);
+
+    const save=document.createElement("button");
+    save.textContent="حفظ الحالة";
+    save.onclick=async()=>{
+      const {error}=await db.from("orders")
+        .update({status:select.value}).eq("id",o.id);
+      alert(error?"فشل التحديث":"تم تحديث الحالة");
+    };
+    card.appendChild(save);
+    box.appendChild(card);
+  });
+}
+
+$("login").onsubmit = async e => {
+  e.preventDefault();
+  const {error}=await db.auth.signInWithPassword({
+    email:$("email").value.trim(),
+    password:$("password").value
+  });
+  if(error){alert("راجع الإيميل وكلمة المرور");return;}
+  $("panel").classList.remove("hidden");
+  await loadOrders();
+};
+
+$("refresh").onclick=loadOrders;
+$("logout").onclick=async()=>{
+  await db.auth.signOut();
+  $("panel").classList.add("hidden");
+  $("orders").replaceChildren();
+};
+</script>
+</body>
+</html>
